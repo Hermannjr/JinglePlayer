@@ -45,3 +45,11 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Python
+__pycache__/
+*.pyc
+app/audio/_tts/
+
+# local tooling
+.claude/

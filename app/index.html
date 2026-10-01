@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Disc Fiction Jingle Player</title>
+<link rel="icon" href="img/head_jules.webp">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ start overlay ============ -->
+<div id="gate" class="gate">
+  <div class="gate-card paper">
+    <img class="gate-logo" src="img/logo.webp" alt="Disc Fiction Ultimate">
+    <div class="tape-label">Disc Fiction presents</div>
+    <h1 class="ransom" aria-label="Jingle Player"></h1>
+    <p class="gate-sub" id="gate-tournament"></p>
+    <ul class="checklist">
+      <li><b>Laptop volume 100%</b>, Spotify's own slider at ~75%</li>
+      <li>Laptop <b>plugged in</b>; leave this window open</li>
+      <li>Speaker connected <b>before</b> pressing start</li>
+    </ul>
+    <div class="gate-actions">
+      <button class="btn btn-big btn-lime" id="gate-start" type="button">Start &amp; play test sound</button>
+      <button class="btn btn-ghost" id="gate-silent" type="button">Start silently</button>
+    </div>
+    <p class="fine">Browsers only allow sound after a click, which is why this button is here.</p>
+  </div>
+  <img class="gate-sticker s1" src="img/jthrow_g.webp" alt="">
+  <img class="gate-sticker s2" src="img/vlay_b_o.webp" alt="">
+</div>
+
+<!-- ============ header ============ -->
+<header class="top">
+  <img class="top-logo" src="img/logo.webp" alt="Disc Fiction">
+  <div class="top-title">
+    <div class="ransom ransom-sm" aria-label="Jingle Player"></div>
+    <div class="top-tournament" id="top-tournament"></div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" data-view="live" role="tab" type="button">Live</button>
+    <button class="tab" data-view="schedule" role="tab" type="button">Schedule</button>
+    <button class="tab" data-view="settings" role="tab" type="button">Settings</button>
+  </nav>
+  <div class="top-right">
+    <button class="onair" id="onair" type="button" title="Sound engine status"><span class="dot"></span><span id="onair-text">Off air</span></button>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main>
+  <section class="view" id="view-live"></section>
+  <section class="view" id="view-schedule"></section>
+  <section class="view" id="view-settings"></section>
+</main>
+
+<!-- speech bubble shown while a jingle plays -->
+<div class="announcer" id="announcer" aria-live="polite">
+  <div class="bubble" id="announcer-text"></div>
+  <img src="img/jjump_b_g.webp" alt="">
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<dialog id="dlg-import" class="paper dlg">
+  <form method="dialog">
+    <h2>Paste schedule from ultie.org</h2>
+    <p>Open the tournament's <em>Games → Scheduled</em> page, select the whole game list, copy it, and paste it here. Teams, fields and times are recognised automatically.</p>
+    <textarea id="import-text" rows="10" placeholder="Supertrumpf&#10;-&#10;Mikado&#10;-&#10;Group A • Herbertgarten #2&#10;09:00 03.10&#10;…"></textarea>
+    <div class="row-gap">
+      <label>Group games use <select id="import-preset-group"></select></label>
+      <label>Play-off games use <select id="import-preset-final"></select></label>
+    </div>
+    <label class="chk"><input type="checkbox" id="import-replace" checked> Replace existing games on the imported days</label>
+    <p class="import-preview" id="import-preview"></p>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" value="cancel" type="submit">Cancel</button>
+      <button class="btn btn-lime" id="import-go" value="ok" type="submit">Import</button>
+    </div>
+  </form>
+</dialog>
+
+<input type="file" id="file-json" accept=".json,application/json" hidden>
+
+<script src="audio/jingles.js"></script>
+<script src="default-schedule.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
