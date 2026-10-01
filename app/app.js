@@ -114,12 +114,14 @@
 
   // ------------------------------------------------------------------ planning
   function clipKey(type, fk) { return type + "_" + fk; }
+  // the single announcer clip set in audio/jingles.js
+  function voiceSet() { return window.JINGLES ? Object.keys(JINGLES.voices)[0] : null; }
   function clipDuration(key) {
-    var d = window.JINGLES && JINGLES.duration[state.settings.voice];
+    var d = window.JINGLES && JINGLES.duration[voiceSet()];
     return (d && d[key]) || 8;
   }
   function clipText(key) {
-    var t = window.JINGLES && JINGLES.text[state.settings.voice];
+    var t = window.JINGLES && JINGLES.text[voiceSet()];
     return (t && t[key]) || key;
   }
 
@@ -181,7 +183,7 @@
 
   // ------------------------------------------------------------------ audio engine
   var engine = (function () {
-    var ctx = null, master = null, buffers = {}, bufVoice = null;
+    var ctx = null, master = null, buffers = {};
     var scheduled = new Map();  // id -> {src, startCtx, endCtx, playAt, text, logged}
     var manual = [];            // manual clips {src,startCtx,endCtx,text,logged}
     var handled = new Set();
@@ -196,7 +198,6 @@
     }
     function decodeVoice(voice) {
       var src = JINGLES.voices[voice], keys = Object.keys(src);
-      bufVoice = voice;
       buffers = {};
       return Promise.all(keys.map(function (k) {
         return new Promise(function (res) {
@@ -225,12 +226,15 @@
 
     function arm() {
       if (armed) return Promise.resolve();
+      // iPhone/iPad (iOS 17+): play even with the silent switch on. Note this also pauses other
+      // audio on the same device, so run Spotify on a different device.
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) { /* unsupported */ }
       var AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC({ latencyHint: "playback" });
       master = ctx.createGain();
       master.gain.value = state.settings.volume;
       master.connect(ctx.destination);
-      return ctx.resume().then(function () { return decodeVoice(state.settings.voice); }).then(function () {
+      return ctx.resume().then(function () { return decodeVoice(voiceSet()); }).then(function () {
         startKeepAlive();
         requestWakeLock();
         armed = true;
@@ -320,12 +324,7 @@
         go();
         return Promise.resolve();
       },
-      setVolume: function (v) { if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05); },
-      setVoice: function (v) {
-        if (!armed || bufVoice === v) return Promise.resolve();
-        cancelPending();
-        return decodeVoice(v).then(tick);
-      }
+      setVolume: function (v) { if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05); }
     };
   })();
 
@@ -681,12 +680,8 @@
   function renderSettings() {
     var s = state.settings, el = $("#view-settings"), html = '<div class="settings-grid">';
     // voice
-    html += '<div class="paper set-card tilt-l"><div class="tape-label">Announcer</div><div class="voices">';
-    [["grandpa", "Grandpa", "Shaky old-timer, made for a Masters tournament.", "img/vwalk_a_g.webp"],
-      ["clear", "Clear", "Crisp radio-style voice. Easiest to understand.", "img/jrun_a_o.webp"]].forEach(function (v) {
-      html += '<label class="voice' + (s.voice === v[0] ? " on" : "") + '"><input type="radio" name="voice" value="' + v[0] + '"' + (s.voice === v[0] ? " checked" : "") + '><img src="' + v[3] + '" alt=""><b>' + v[1] + "</b><span>" + v[2] + '</span><button type="button" class="btn btn-xs" data-act="preview" data-voice="' + v[0] + '">▶ Preview</button></label>';
-    });
-    html += '</div><label class="vol">Jingle volume <input type="range" id="vol" min="0" max="1" step="0.05" value="' + s.volume + '"><b id="vol-v">' + Math.round(s.volume * 100) + "%</b></label>";
+    html += '<div class="paper set-card tilt-l"><div class="tape-label">Announcer</div><div class="announcer-row"><img src="img/jrun_a_o.webp" alt=""><p>Same voice as Disc Fiction’s <em>Ultimate in a Minute</em> explainer.</p><button type="button" class="btn" data-act="test">🔊 Test sound</button></div>';
+    html += '<label class="vol">Jingle volume <input type="range" id="vol" min="0" max="1" step="0.05" value="' + s.volume + '"><b id="vol-v">' + Math.round(s.volume * 100) + "%</b></label>";
     html += '<p class="muted small">Keep this at 100% and turn <b>Spotify</b> down to ~75% with its own slider, so the jingles stand out over the music. Jingles are already mastered extra-loud.</p></div>';
 
     // jingles
@@ -847,12 +842,6 @@
         e.preventDefault();
         if (confirm("Replace the whole schedule and settings with the tournament defaults?")) commit(function (s) { var d = clone(window.DEFAULT_STATE); Object.keys(d).forEach(function (k) { s[k] = d[k]; }); }, "Reset to tournament default");
         break;
-      case "preview": {
-        e.preventDefault();
-        var v = t.getAttribute("data-voice");
-        try { new Audio(JINGLES.voices[v]["five_1"]).play(); } catch (err) { /* ignore */ }
-        break;
-      }
       case "add-field": commit(function (s) { var n = s.settings.fields.length + 1; s.settings.fields.push({ n: n, name: "Field " + n }); }); break;
       case "rm-field": commit(function (s) {
         var f = s.settings.fields.pop();
@@ -894,11 +883,6 @@
     }
     if (t.name === "sbf") { renderLive.sbf = t.value; return; }
     if (t.id === "ripple") { commit(function (s) { s.settings.ripple = t.checked; }); return; }
-    if (t.name === "voice") {
-      commit(function (s) { s.settings.voice = t.value; });
-      engine.setVoice(t.value).then(function () { replan(); });
-      return;
-    }
     if (t.hasAttribute && t.hasAttribute("data-jingle")) { var k = t.getAttribute("data-jingle"); commit(function (s) { s.settings.jingles[k] = t.checked; }); return; }
     if (t.id === "htbreak") { commit(function (s) { s.settings.htBreak = Math.max(1, +t.value || 2); }); return; }
     if (t.id === "merge") { commit(function (s) { s.settings.mergeFields = t.checked; }); return; }
@@ -1058,6 +1042,11 @@
   if (!params.get("view")) try { v0 = localStorage.getItem(STORE_KEY + ".view") || "live"; } catch (e) { /* ignore */ }
   setView(v0);
   updateOnAir();
+
+  // offline support when hosted (service workers don't run from file://)
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register("sw.js").catch(function () { /* offline support unavailable */ });
+  }
 
   var resizeT;
   window.addEventListener("resize", function () {

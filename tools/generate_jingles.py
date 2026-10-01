@@ -1,59 +1,50 @@
 """Generate all JinglePlayer announcement clips.
 
-Each clip = synthesized sting (fanfare / chime / air horn / whistle) + TTS voice line,
-compressed and loudness-normalised hot (-11 LUFS) so it cuts through background music.
+Each clip = synthesized sting (fanfare / chime / air horn / whistle) + voice line,
+compressed and loudness-normalised hot so it cuts through background music.
 
-Two announcer sets are produced:
-  grandpa - en-GB-ThomasNeural, slowed down, with a shaky "old man" tremor
-  clear   - en-US-GuyNeural, plain and crisp
+Voice: Kokoro TTS (local, free) with voice af_heart at speed 0.96, the same as the
+"Ultimate in a Minute" explainer video.
+
+Model files (not in the repo, ~350 MB) from
+https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0 :
+  kokoro-v1.0.onnx, voices-v1.0.bin
+Put them in tools/models/ or point KOKORO_DIR at their folder.
 
 Output:
-  app/audio/<voice>/<event>_<field>.mp3   (individual files, handy for checking)
-  app/audio/jingles.js                    (everything base64-inlined, loaded by the app)
+  app/audio/voice/<event>_<field>.mp3   (individual files, handy for checking)
+  app/audio/jingles.js                  (everything base64-inlined, loaded by the app)
 
 Usage:  pip install -r tools/requirements.txt && python tools/generate_jingles.py
-Edit LINES below to change the wording, then re-run.
+Edit LINES below to change the wording, then re-run (and python tools/build.py).
 """
-import asyncio, base64, json, subprocess, sys
+import base64, json, os, subprocess
 from pathlib import Path
 
-import edge_tts
 import imageio_ffmpeg
 import numpy as np
-from scipy.signal import butter, sosfilt
+from kokoro_onnx import Kokoro
+from scipy.signal import butter, resample_poly, sosfilt
 
 SR = 44100
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "app" / "audio"
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+MODELS = Path(os.environ.get("KOKORO_DIR", Path(__file__).resolve().parent / "models"))
+VOICE, SPEED = "af_heart", 0.96
+SET = "voice"  # name of the clip set inside jingles.js
 
 FIELDS = {"1": "field one", "2": "field two", "3": "field three", "4": "field four", "all": "all fields"}
 
 # {f} = "field one" / "all fields", {F} = capitalised
 LINES = {
-    "grandpa": {
-        "start": "Attention, {f}! Time is running. Pull when ready... and have fun out there, youngsters!",
-        "five": "Five minutes left on {f}! Five more minutes... then you can rest those knees.",
-        "halftime": "Halftime on {f}! Finish the point in play, then take your two minutes. Catch your breath!",
-        "halftime_over": "{F}, halftime is over! Up you get, everybody back on the line.",
-        "end": "Time is up on {f}! That's the cap. Finish the point in play... and don't forget your spirit circle.",
-    },
-    "clear": {
-        "start": "Attention, {f}! Time is running. Pull when ready, and have fun!",
-        "five": "Five minutes left on {f}! Five minutes to go.",
-        "halftime": "Halftime on {f}! Finish the point in play, then take your two-minute break.",
-        "halftime_over": "{F}, halftime is over! Everybody back on the line.",
-        "end": "Time is up on {f}! That's the cap. Finish the point in play, and don't forget your spirit circle.",
-    },
+    "start": "Attention, {f}! Time is running. Pull when ready, and have fun!",
+    "five": "Five minutes left on {f}! Five minutes to go.",
+    "halftime": "Halftime on {f}! Finish the point in play, then take your two-minute break.",
+    "halftime_over": "{F}, halftime is over! Everybody back on the line.",
+    "end": "Time is up on {f}! That's the cap. Finish the point in play, and don't forget your spirit circle.",
 }
-TEST_LINE = {
-    "grandpa": "Testing, testing... one, two. Is this thing on? Ah, there we go. The Disc Fiction jingle player is ready!",
-    "clear": "Testing, one, two. The Disc Fiction jingle player is ready!",
-}
-VOICES = {
-    "grandpa": dict(voice="en-GB-ThomasNeural", rate="-12%", pitch="-4Hz"),
-    "clear": dict(voice="en-US-GuyNeural", rate="+0%", pitch="+0Hz"),
-}
+TEST_LINE = "Testing, one, two. The Disc Fiction jingle player is ready!"
 
 # ---------------------------------------------------------------- synthesis helpers
 
@@ -166,23 +157,9 @@ def trim(x, thr=0.02):
     return x[max(0, idx[0] - int(0.02 * SR)): idx[-1] + int(0.1 * SR)]
 
 
-def old_man(x, seed=0):
-    """Shaky elderly voice: slow wobbling pitch (variable delay) + amplitude tremor."""
-    rng = np.random.default_rng(seed)
-    t = np.arange(len(x)) / SR
-    rate = 5.3 + 0.4 * np.sin(2 * np.pi * 0.31 * t + rng.uniform(0, 6))
-    wob = np.sin(2 * np.pi * np.cumsum(rate) / SR)
-    depth = 0.00055 * (1 + 0.35 * np.sin(2 * np.pi * 0.7 * t))
-    d = 0.002 + depth * wob  # seconds
-    src = np.clip(np.arange(len(x)) - d * SR, 0, len(x) - 1)
-    y = np.interp(src, np.arange(len(x)), x)
-    y *= 1 - 0.12 * (0.5 + 0.5 * wob)
-    # a touch of warmth: gentle high cut
-    return lowpass(y, 7000, 1)
-
-
-async def tts(text, cfg, path):
-    await edge_tts.Communicate(text, cfg["voice"], rate=cfg["rate"], pitch=cfg["pitch"]).save(str(path))
+def tts(kokoro, text):
+    a, sr = kokoro.create(text, voice=VOICE, speed=SPEED, lang="en-us")
+    return resample_poly(np.asarray(a, dtype=np.float64), SR, sr)
 
 
 def master(x, out_mp3):
@@ -196,59 +173,33 @@ def master(x, out_mp3):
 
 # ---------------------------------------------------------------- main
 
-async def main():
-    tmp = OUT / "_tts"
-    tmp.mkdir(parents=True, exist_ok=True)
-    jobs = []  # (voice_set, key, text, event)
-    for vs in VOICES:
-        for ev, line in LINES[vs].items():
-            for fk, fname in FIELDS.items():
-                text = line.replace("{f}", fname).replace("{F}", fname[0].upper() + fname[1:])
-                jobs.append((vs, f"{ev}_{fk}", text, ev))
-        jobs.append((vs, "test", TEST_LINE[vs], "test"))
-
-    sem = asyncio.Semaphore(6)
-
-    async def run(job):
-        vs, key, text, _ = job
-        p = tmp / f"{vs}_{key}.mp3"
-        async with sem:
-            for attempt in range(4):
-                try:
-                    await tts(text, VOICES[vs], p)
-                    return
-                except Exception as e:  # network hiccups
-                    print("retry", key, e, file=sys.stderr)
-                    await asyncio.sleep(1 + attempt)
-            raise RuntimeError(f"TTS failed for {vs}/{key}")
-
-    await asyncio.gather(*(run(j) for j in jobs))
+def main():
+    kokoro = Kokoro(str(MODELS / "kokoro-v1.0.onnx"), str(MODELS / "voices-v1.0.bin"))
+    jobs = []  # (key, text, event)
+    for ev, line in LINES.items():
+        for fk, fname in FIELDS.items():
+            jobs.append((f"{ev}_{fk}", line.replace("{f}", fname).replace("{F}", fname[0].upper() + fname[1:]), ev))
+    jobs.append(("test", TEST_LINE, "test"))
 
     stings = {ev: sting(ev) for ev in ["start", "five", "end", "halftime", "halftime_over", "test"]}
-    bundle = {"voices": {}, "text": {}, "duration": {}}
-    for i, (vs, key, text, ev) in enumerate(jobs):
-        v = trim(decode(tmp / f"{vs}_{key}.mp3"))
-        if vs == "grandpa":
-            v = old_man(v, seed=i)
-        v = norm(v, 0.9)
-        s = stings[ev] * (0.7 if ev in ("end",) else 0.85)
+    bundle = {"voices": {SET: {}}, "text": {SET: {}}, "duration": {SET: {}}}
+    (OUT / SET).mkdir(parents=True, exist_ok=True)
+    for key, text, ev in jobs:
+        v = norm(trim(tts(kokoro, text)), 0.9)
+        s = stings[ev] * (0.7 if ev == "end" else 0.85)
         clip = place([(0, s), (len(s) / SR + 0.12, v)])
         clip = np.concatenate([np.zeros(int(0.05 * SR)), clip, np.zeros(int(0.25 * SR))])
-        (OUT / vs).mkdir(exist_ok=True)
-        mp3 = OUT / vs / f"{key}.mp3"
+        mp3 = OUT / SET / f"{key}.mp3"
         master(clip, mp3)
-        bundle["voices"].setdefault(vs, {})[key] = "data:audio/mpeg;base64," + base64.b64encode(mp3.read_bytes()).decode()
-        bundle["text"].setdefault(vs, {})[key] = text
-        bundle["duration"].setdefault(vs, {})[key] = round(len(clip) / SR, 2)
-        print(f"{vs:8s} {key:18s} {len(clip) / SR:5.2f}s  {text}")
+        bundle["voices"][SET][key] = "data:audio/mpeg;base64," + base64.b64encode(mp3.read_bytes()).decode()
+        bundle["text"][SET][key] = text
+        bundle["duration"][SET][key] = round(len(clip) / SR, 2)
+        print(f"{key:18s} {len(clip) / SR:5.2f}s  {text}")
 
     js = "// Generated by tools/generate_jingles.py - do not edit by hand.\nwindow.JINGLES = " + json.dumps(bundle) + ";\n"
     (OUT / "jingles.js").write_text(js, encoding="utf-8")
-    for f in tmp.iterdir():
-        f.unlink()
-    tmp.rmdir()
     print("wrote", OUT / "jingles.js", f"{len(js) / 1e6:.1f} MB")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

@@ -53,3 +53,9 @@ app/audio/_tts/
 
 # local tooling
 .claude/
+
+# Kokoro TTS model files (download separately, see tools/generate_jingles.py)
+tools/models/
+
+# built by CI for GitHub Pages
+dist/site/

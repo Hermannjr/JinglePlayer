@@ -1,4 +1,5 @@
-edge-tts
+kokoro-onnx
+soundfile
 numpy
 scipy
 imageio-ffmpeg

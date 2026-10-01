@@ -51,7 +51,6 @@ window.DEFAULT_STATE = (function () {
     version: 1,
     tournament: "JÖM U20 & ÖM-M 2026",
     settings: {
-      voice: "grandpa",
       volume: 1,
       jingles: { start: true, five: true, halftime: true, end: true },
       htBreak: 2,

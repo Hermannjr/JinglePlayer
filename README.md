@@ -6,7 +6,9 @@ Windows and macOS with no install and no internet.
 
 ## For organisers: quick start
 
-1. Copy **`dist/JinglePlayer.html`** to the laptop and double-click it. Chrome or Edge work best; Safari works too.
+1. Open **https://hermannjr.github.io/JinglePlayer/** in Chrome or Edge (Safari works too).
+   Open it once while you still have internet. After that it also works offline at the field.
+   *No internet at all?* Copy **`dist/JinglePlayer.html`** to the laptop and double-click it instead.
 2. Laptop volume **100%**. Start Spotify and set **Spotify's own volume slider to about 75%**.
 3. Click **Start & play test sound**. You should hear the announcer.
 4. Leave the window open and the laptop plugged in. That's it.
@@ -33,10 +35,19 @@ game pushes the rest of that field's day along with it.
   copy, and paste it in. Teams, fields, dates and times are recognised, and you choose the game type
   (length + halftime minute) for group and play-off games.
 * Or add games by hand with **+ Add game**, or use **+ Day** to add another day.
-* **Settings**: announcer voice (*Grandpa* or *Clear*), which jingles to use, halftime break length,
-  field names (up to 4), and game types.
+* **Settings**: which jingles to use, halftime break length, field names (up to 4), and game types.
 * Everything saves automatically in the browser. **Save file** / **Load file** moves a schedule to
   another laptop or keeps a backup.
+
+### On a phone or tablet
+
+It works, but a laptop is the more reliable choice. If you use a phone:
+
+* Open the link and use **Add to Home Screen**. It then opens full-screen and works offline.
+* Use a **spare** phone connected to the speaker and the charger, with the **screen on** and the app
+  in front. Phones pause web pages when locked or in the background.
+* Play Spotify from **another device**. On iPhone (iOS 17+) the jingles play even with the silent
+  switch on, which also pauses other audio on that phone.
 
 ### Good to know
 
@@ -53,11 +64,13 @@ game pushes the rest of that field's day along with it.
 ## Project layout
 
 ```
-dist/JinglePlayer.html   single-file build (what organisers use)
+dist/JinglePlayer.html   single-file build (offline copy for organisers)
+dist/site/               hosted build: same page + manifest, icons, offline service worker (built by CI)
+.github/workflows/pages.yml  builds and deploys dist/site to GitHub Pages on every push to master
 app/                     source: index.html, app.js, styles.css, default-schedule.js
 app/audio/               generated jingles (mp3 per clip + jingles.js bundle)
 app/img, app/fonts       Disc Fiction artwork and fonts (from the "Ultimate in a Minute" explainer)
-tools/generate_jingles.py  makes all announcement audio (free Microsoft Edge TTS + synthesized stings)
+tools/generate_jingles.py  makes all announcement audio (local Kokoro TTS + synthesized stings)
 tools/build.py           bundles app/ into dist/JinglePlayer.html
 legacy/                  the original 2015 Java JinglePlayer
 ```
@@ -66,7 +79,11 @@ During development you can open `app/index.html` directly. No server is needed.
 
 ### Changing the announcements
 
-Edit `LINES` in `tools/generate_jingles.py`, then:
+The voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx), a free TTS model that runs
+locally. It uses voice `af_heart` at speed 0.96, the same as the *Ultimate in a Minute* explainer.
+Download `kokoro-v1.0.onnx` and `voices-v1.0.bin` (about 350 MB) from the
+[model-files-v1.0 release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0)
+into `tools/models/`. Then edit `LINES` in `tools/generate_jingles.py` and run:
 
 ```
 pip install -r tools/requirements.txt
@@ -74,8 +91,6 @@ python tools/generate_jingles.py
 python tools/build.py
 ```
 
-The voices are Microsoft Edge neural TTS (free, no account needed). *Grandpa* is
-`en-GB-ThomasNeural`, slowed down, with a synthesized tremor. *Clear* is `en-US-GuyNeural`.
 Each clip is a sting (fanfare, chime, air horn or whistle) followed by the voice line, compressed
 and normalised loud (around -13 LUFS) to cut through background music.
 
