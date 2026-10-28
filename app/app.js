@@ -16,9 +16,10 @@
     halftime: { label: "Halftime", icon: "◐", short: "Half" },
     halftime_over: { label: "Halftime over", icon: "↺", short: "2nd half" },
     five: { label: "5 minutes left", icon: "⏳", short: "5 min" },
+    two: { label: "2 minutes left", icon: "⏳", short: "2 min" },
     end: { label: "Time cap / game over", icon: "■", short: "Cap" }
   };
-  var TYPE_PRIORITY = { end: 0, halftime: 1, halftime_over: 2, five: 3, start: 4 };
+  var TYPE_PRIORITY = { end: 0, halftime: 1, halftime_over: 2, five: 3, two: 3, start: 4 };
   var HEADS = ["img/head_jules.webp", "img/head_vincent.webp", "img/head_jules.webp", "img/head_vincent.webp"];
   var FIELD_COLORS = ["lime", "orange", "yellow", "teal"];
   var DAYNAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -114,6 +115,9 @@
 
   // ------------------------------------------------------------------ planning
   function clipKey(type, fk) { return type + "_" + fk; }
+  // end-of-game warning: 5 (default) or 2 minutes before the time cap
+  function warnMin() { return state.settings.warnMin === 2 ? 2 : 5; }
+  function warnType() { return warnMin() === 2 ? "two" : "five"; }
   // the single announcer clip set in audio/jingles.js
   function voiceSet() { return window.JINGLES ? Object.keys(JINGLES.voices)[0] : null; }
   function clipDuration(key) {
@@ -139,7 +143,7 @@
         add("halftime", g.ht);
         if (g.ht + s.htBreak < g.dur) add("halftime_over", g.ht + s.htBreak);
       }
-      if (s.jingles.five && g.dur > 5) add("five", g.dur - 5);
+      if (s.jingles.five && g.dur > warnMin()) add(warnType(), g.dur - warnMin());
       if (s.jingles.end) add("end", g.dur);
     });
 
@@ -461,7 +465,7 @@
       var v = String(Math.min(f.n, 4));
       return '<label class="sb-f"><input type="radio" name="sbf" value="' + v + '"' + (sbf === v ? " checked" : "") + "><span>" + esc(f.name) + "</span></label>";
     }).join("") + '<label class="sb-f"><input type="radio" name="sbf" value="all"' + (sbf === "all" ? " checked" : "") + "><span>All fields</span></label></div>";
-    html += '<div class="sb-btns">' + ["start", "halftime", "halftime_over", "five", "end"].map(function (t) {
+    html += '<div class="sb-btns">' + ["start", "halftime", "halftime_over", warnType(), "end"].map(function (t) {
       return '<button class="btn sb type-' + t + '" type="button" data-act="sb" data-type="' + t + '"><span>' + TYPES[t].icon + "</span>" + TYPES[t].short + "</button>";
     }).join("") + '<button class="btn sb" type="button" data-act="test"><span>🔊</span>Test</button></div>';
     html += "</div></div>";
@@ -493,7 +497,7 @@
 
   function phaseOf(g, now) {
     var t = (now - gameStart(g)) / 60000, s = state.settings;
-    if (t >= g.dur - 5) return { k: "last5", label: "Last 5 minutes" };
+    if (t >= g.dur - warnMin()) return { k: "last5", label: "Last " + warnMin() + " minutes" };
     if (s.jingles.halftime && g.ht > 0 && t >= g.ht && t < g.ht + s.htBreak) return { k: "ht", label: "Halftime break" };
     if (g.ht > 0 && t >= g.ht) return { k: "h2", label: "Second half" };
     return { k: "h1", label: g.ht > 0 ? "First half · HT cap " + hhmm(gameStart(g) + g.ht * 60000) : "In play" };
@@ -509,7 +513,7 @@
       html += '<div class="phase ph-' + x.phase.k + '">' + esc(x.phase.label) + "</div>";
       html += '<div class="bar"><div class="bar-fill" data-prog="' + t0 + "," + t1 + '"></div>';
       if (g.ht > 0 && g.ht < g.dur) html += '<i class="mk mk-ht" style="left:' + (g.ht / g.dur * 100) + '%" title="Halftime"></i>';
-      if (g.dur > 5) html += '<i class="mk mk-5" style="left:' + ((g.dur - 5) / g.dur * 100) + '%" title="5 min left"></i>';
+      if (g.dur > warnMin()) html += '<i class="mk mk-5" style="left:' + ((g.dur - warnMin()) / g.dur * 100) + '%" title="' + warnMin() + ' min left"></i>';
       html += "</div>";
       html += '<div class="bar-legend type-mono"><span>' + hhmm(t0) + '</span><span><b data-cd="' + t1 + '"></b> left</span><span>' + hhmm(t1) + "</span></div>";
     } else if (nx) {
@@ -611,7 +615,7 @@
         var x = (timeToMin(g.time) - a) * PX_PER_MIN, gw = g.dur * PX_PER_MIN;
         html += '<div class="tl-game fc-' + FIELD_COLORS[i % 4] + (bad.has(g.id) ? " overlap" : "") + (g.on ? "" : " off") + '" data-id="' + g.id + '" style="left:' + x + "px;width:" + gw + 'px" title="' + esc(g.label + " · " + g.note) + '">' +
           (g.ht > 0 && g.ht < g.dur ? '<i class="tl-ht" style="left:' + (g.ht / g.dur * 100) + '%"></i>' : "") +
-          '<i class="tl-5" style="left:' + ((g.dur - 5) / g.dur * 100) + '%"></i>' +
+          '<i class="tl-5" style="left:' + ((g.dur - warnMin()) / g.dur * 100) + '%"></i>' +
           '<b class="type-mono">' + g.time.slice(0, 5) + "</b><span>" + esc(g.label) + "</span></div>";
       });
       html += "</div></div>";
@@ -686,9 +690,16 @@
 
     // jingles
     html += '<div class="paper set-card tilt-r"><div class="tape-label">Which jingles</div>';
-    [["start", "Game start", "“Time is running. Pull when ready!”"], ["five", "5 minutes left", "5 minutes before each game's time cap"],
-      ["halftime", "Halftime + halftime over", "At each game's halftime minute, and again after the break"], ["end", "Time cap / game over", "When a game's time is up"]].forEach(function (j) {
+    var wm = warnMin();
+    [["start", "Game start", "“Time is running. Pull when ready!”"], ["five", "End-of-game warning", wm + " minutes before each game's time cap"],
+      ["halftime", "Halftime jingles", "“Halftime” at each game's halftime minute and “halftime is over” after the break. Switch off to skip both"],
+      ["end", "Time cap / game over", "When a game's time is up"]].forEach(function (j) {
       html += '<label class="toggle"><input type="checkbox" data-jingle="' + j[0] + '"' + (s.jingles[j[0]] ? " checked" : "") + '><span class="sw"></span><span><b>' + j[1] + "</b><small>" + j[2] + "</small></span></label>";
+      if (j[0] === "five") {
+        html += '<div class="seg' + (s.jingles.five ? "" : " is-off") + '" role="radiogroup" aria-label="Warning time">' + [5, 2].map(function (m) {
+          return '<label><input type="radio" name="warnmin" value="' + m + '"' + (wm === m ? " checked" : "") + "><span>" + m + " min left</span></label>";
+        }).join("") + "</div>";
+      }
     });
     html += '<label class="inline">Halftime break <input type="number" class="num" id="htbreak" min="1" max="15" value="' + s.htBreak + '"> min</label>';
     html += '<label class="toggle"><input type="checkbox" id="merge"' + (s.mergeFields ? " checked" : "") + '><span class="sw"></span><span><b>Say “all fields” when every field hits the same moment</b><small>Otherwise each field is announced one after another</small></span></label>';
@@ -884,6 +895,7 @@
     if (t.name === "sbf") { renderLive.sbf = t.value; return; }
     if (t.id === "ripple") { commit(function (s) { s.settings.ripple = t.checked; }); return; }
     if (t.hasAttribute && t.hasAttribute("data-jingle")) { var k = t.getAttribute("data-jingle"); commit(function (s) { s.settings.jingles[k] = t.checked; }); return; }
+    if (t.name === "warnmin") { commit(function (s) { s.settings.warnMin = +t.value; }, "End-of-game warning: " + t.value + " minutes before the cap"); return; }
     if (t.id === "htbreak") { commit(function (s) { s.settings.htBreak = Math.max(1, +t.value || 2); }); return; }
     if (t.id === "merge") { commit(function (s) { s.settings.mergeFields = t.checked; }); return; }
     if (t.hasAttribute && t.hasAttribute("data-fieldname")) { var n = +t.getAttribute("data-fieldname"); commit(function (s) { s.settings.fields.find(function (x) { return x.n === n; }).name = t.value || "Field " + n; }); return; }

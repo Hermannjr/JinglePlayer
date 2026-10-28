@@ -426,3 +426,13 @@ body.rehearsal .top::after {
   .bubble { max-width: 230px; font-size: .95rem; margin-bottom: 70px; padding: 10px 12px; }
   .hero-sticker { display: none; }
 }
+
+/* 5 min / 2 min warning choice */
+.seg { display: inline-flex; margin: -2px 0 8px 58px; border: 2px solid var(--ink); border-radius: 3px; overflow: hidden; }
+.seg label { cursor: pointer; }
+.seg input { position: absolute; opacity: 0; }
+.seg span { display: block; padding: 5px 14px; font-weight: 800; font-size: .9rem; }
+.seg label + label span { border-left: 2px solid var(--ink); }
+.seg input:checked + span { background: var(--orange-2); }
+.seg input:focus-visible + span { outline: 3px solid var(--orange-2); outline-offset: -3px; }
+.seg.is-off { opacity: .45; }
