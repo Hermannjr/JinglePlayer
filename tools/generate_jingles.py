@@ -40,6 +40,7 @@ FIELDS = {"1": "field one", "2": "field two", "3": "field three", "4": "field fo
 LINES = {
     "start": "Attention, {f}! Time is running. Pull when ready, and have fun!",
     "five": "Five minutes left on {f}! Five minutes to go.",
+    "two": "Two minutes left on {f}! Two minutes to go.",
     "halftime": "Halftime on {f}! Finish the point in play, then take your two-minute break.",
     "halftime_over": "{F}, halftime is over! Everybody back on the line.",
     "end": "Time is up on {f}! That's the cap. Finish the point in play, and don't forget your spirit circle.",
@@ -130,7 +131,7 @@ def sting(event):
         parts = [(s, brass(n(m), d)) for s, m, d in notes]
         parts += [(0.54, 0.6 * brass(n(72), 0.75)), (0.54, 0.5 * brass(n(76), 0.75))]
         return norm(place(parts))
-    if event == "five":  # attention chime C5 E5 G5 C6
+    if event in ("five", "two"):  # attention chime C5 E5 G5 C6
         parts = [(i * 0.28, bell(n(m), 1.4)) for i, m in enumerate([72, 76, 79, 84])]
         return norm(place(parts, 1.9))
     if event == "end":  # two air-horn blasts
@@ -181,7 +182,7 @@ def main():
             jobs.append((f"{ev}_{fk}", line.replace("{f}", fname).replace("{F}", fname[0].upper() + fname[1:]), ev))
     jobs.append(("test", TEST_LINE, "test"))
 
-    stings = {ev: sting(ev) for ev in ["start", "five", "end", "halftime", "halftime_over", "test"]}
+    stings = {ev: sting(ev) for ev in ["start", "five", "two", "end", "halftime", "halftime_over", "test"]}
     bundle = {"voices": {SET: {}}, "text": {SET: {}}, "duration": {SET: {}}}
     (OUT / SET).mkdir(parents=True, exist_ok=True)
     for key, text, ev in jobs:

@@ -59,3 +59,4 @@ tools/models/
 
 # built by CI for GitHub Pages
 dist/site/
+tools/.venv/

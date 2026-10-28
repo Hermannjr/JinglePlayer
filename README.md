@@ -1,7 +1,7 @@
 # Disc Fiction Jingle Player
 
 Automatic tournament announcements for ultimate frisbee: game start, halftime, halftime over,
-5 minutes left and time cap. It runs from the schedule, per field, in the browser. It works on
+5 or 2 minutes left and time cap. It runs from the schedule, per field, in the browser. It works on
 Windows and macOS with no install and no internet.
 
 ## For organisers: quick start
@@ -35,7 +35,9 @@ game pushes the rest of that field's day along with it.
   copy, and paste it in. Teams, fields, dates and times are recognised, and you choose the game type
   (length + halftime minute) for group and play-off games.
 * Or add games by hand with **+ Add game**, or use **+ Day** to add another day.
-* **Settings**: which jingles to use, halftime break length, field names (up to 4), and game types.
+* **Settings**: which jingles to use (each can be switched off, including both halftime jingles),
+  whether the end-of-game warning comes **5 or 2 minutes** before the cap, halftime break length,
+  field names (up to 4), and game types.
 * Everything saves automatically in the browser. **Save file** / **Load file** moves a schedule to
   another laptop or keeps a backup.
 
@@ -100,3 +102,9 @@ and normalised loud (around -13 LUFS) to cut through background music.
 the game types from the ultie.org regulations. After editing, run `python tools/build.py`. Browsers
 that already have a saved schedule keep theirs until you use *Reset to tournament default* at the
 bottom of the Schedule tab.
+
+## Development
+
+Work is tracked in [GitHub issues](https://github.com/Hermannjr/JinglePlayer/issues). Each change gets
+a branch and a pull request that says `Closes #<issue>`. Merging to `master` publishes the site
+automatically, so `master` is always what's live.

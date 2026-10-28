@@ -53,6 +53,7 @@ window.DEFAULT_STATE = (function () {
     settings: {
       volume: 1,
       jingles: { start: true, five: true, halftime: true, end: true },
+      warnMin: 5, // end-of-game warning: 5 or 2 minutes before the time cap
       htBreak: 2,
       mergeFields: true,
       ripple: true,
