@@ -141,8 +141,7 @@ a { color: var(--orange); }
 .gate-card { width: min(640px, 100%); text-align: center; padding: 34px 28px 22px; transform: rotate(-.6deg); }
 .gate-logo { width: 170px; margin: -110px auto 6px; display: block; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .5)); }
 .gate-card .tape-label { margin: 6px 0 4px; }
-.gate-sub { font-family: var(--f-type); font-weight: 400; margin: 6px 0 14px; color: var(--ink-soft); }
-.checklist { text-align: left; max-width: 430px; margin: 0 auto 18px; padding: 0; list-style: none; font-weight: 700; }
+.checklist { text-align: left; max-width: 430px; margin: 18px auto 18px; padding: 0; list-style: none; font-weight: 700; }
 .checklist li { padding: 5px 0 5px 32px; position: relative; }
 .checklist li::before { content: "✔"; position: absolute; left: 4px; top: 3px; font-family: var(--f-marker); color: var(--orange); font-size: 1.15rem; }
 .gate-actions { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -160,7 +159,6 @@ a { color: var(--orange); }
 }
 .top-logo { height: 56px; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .6)); }
 .top-title { display: flex; flex-direction: column; gap: 2px; }
-.top-tournament { color: var(--cream); font-family: var(--f-type); font-weight: 400; font-size: .85rem; opacity: .85; }
 .tabs { display: flex; gap: 6px; margin-left: 12px; }
 .tab {
   background: transparent; border: 0; color: var(--cream); font-family: var(--f-head); font-size: 1.3rem; letter-spacing: .04em;

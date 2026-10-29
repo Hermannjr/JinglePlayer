@@ -767,7 +767,6 @@
     renderAll();
   }
   function renderAll() {
-    $("#top-tournament").textContent = state.tournament || "";
     if (view === "live") renderLive(true);
     if (view === "schedule") keepFocus(renderSchedule);
     if (view === "settings") keepFocus(renderSettings);
@@ -1085,7 +1084,6 @@
     ransom($(".top .ransom"), "JINGLE PLAYER", h ? ["c-orange", "c-purple", "c-bone", "c-orange"] : ["c-orange", "c-yellow", "c-paper", "c-kraft", "c-lime", "c-white"]);
   }
   applyTheme();
-  $("#gate-tournament").textContent = state.tournament || "";
   if (!window.JINGLES) { toast("audio/jingles.js is missing. Run tools/generate_jingles.py"); }
   if (params.has("nogate")) $("#gate").style.display = "none";
   if (CLOCK_OFFSET) document.body.classList.add("rehearsal");
