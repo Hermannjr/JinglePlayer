@@ -3,3 +3,5 @@ soundfile
 numpy
 scipy
 imageio-ffmpeg
+pillow
+requests

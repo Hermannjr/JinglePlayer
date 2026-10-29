@@ -60,3 +60,5 @@ tools/models/
 # built by CI for GitHub Pages
 dist/site/
 tools/.venv/
+tools/art-raw/
+tools/tts-cache/

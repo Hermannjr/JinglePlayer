@@ -21,6 +21,17 @@
   };
   var TYPE_PRIORITY = { end: 0, halftime: 1, halftime_over: 2, five: 3, two: 3, start: 4 };
   var HEADS = ["img/head_jules.webp", "img/head_vincent.webp", "img/head_jules.webp", "img/head_vincent.webp"];
+  // Look: "classic" or "halloween". Saved states without a theme get DEFAULT_THEME.
+  var DEFAULT_THEME = "halloween";
+  var HALLOWEEN_ART = {
+    "img/logo.webp": "img/halloween/logo.webp",
+    "img/jthrow_g.webp": "img/halloween/vampire.webp",
+    "img/vlay_b_o.webp": "img/halloween/ghost_dive.webp",
+    "img/jjump_b_g.webp": "img/halloween/ghost_dive.webp",
+    "img/jrun_a_o.webp": "img/halloween/ghost.webp",
+    "img/head_jules.webp": "img/halloween/head_vampire.webp",
+    "img/head_vincent.webp": "img/halloween/head_ghost.webp"
+  };
   var FIELD_COLORS = ["lime", "orange", "yellow", "teal"];
   var DAYNAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -119,7 +130,12 @@
   function warnMin() { return state.settings.warnMin === 2 ? 2 : 5; }
   function warnType() { return warnMin() === 2 ? "two" : "five"; }
   // the single announcer clip set in audio/jingles.js
-  function voiceSet() { return window.JINGLES ? Object.keys(JINGLES.voices)[0] : null; }
+  function theme() { return state.settings.theme === "classic" || state.settings.theme === "halloween" ? state.settings.theme : DEFAULT_THEME; }
+  function art(path) { return theme() === "halloween" && HALLOWEEN_ART[path] || path; }
+  function voiceSet() {
+    if (!window.JINGLES) return null;
+    return theme() === "halloween" && JINGLES.voices.halloween ? "halloween" : "voice";
+  }
   function clipDuration(key) {
     var d = window.JINGLES && JINGLES.duration[voiceSet()];
     return (d && d[key]) || 8;
@@ -328,6 +344,12 @@
         go();
         return Promise.resolve();
       },
+      // switch clip set (theme change): re-decode and reschedule
+      reload: function () {
+        if (!armed) return Promise.resolve();
+        cancelPending();
+        return decodeVoice(voiceSet()).then(tick);
+      },
       setVolume: function (v) { if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05); }
     };
   })();
@@ -366,6 +388,18 @@
     });
     return n;
   }
+  function dayNum(date) { return dates().indexOf(date) + 1; }
+  // move every game of one day to another date
+  function moveDay(from, to) {
+    if (!to || to === from) return;
+    var clash = state.games.some(function (g) { return g.date === to; });
+    if (clash && !confirm("There are already games on " + dayLabel(to, true) + ". Move Day " + dayNum(from) + " there anyway and combine the two days?")) { renderAll(); return; }
+    var n = dayNum(from);
+    commit(function (s) { s.games.forEach(function (g) { if (g.date === from) g.date = to; }); },
+      "Day " + n + " moved from " + dayLabel(from) + " to " + dayLabel(to, true));
+    schedDay = to;
+    if (view === "schedule") renderSchedule();
+  }
   function findGame(s, id) { return s.games.find(function (g) { return g.id === id; }); }
 
   // ------------------------------------------------------------------ rendering helpers
@@ -397,7 +431,7 @@
   function fieldChip(fk) {
     if (fk === "all") return '<span class="chip chip-all">All fields</span>';
     var n = +fk, i = (n - 1) % 4;
-    return '<span class="chip chip-' + FIELD_COLORS[i] + '"><img src="' + HEADS[i] + '" alt="">' + esc(fieldName(n)) + "</span>";
+    return '<span class="chip chip-' + FIELD_COLORS[i] + '"><img src="' + art(HEADS[i]) + '" alt="">' + esc(fieldName(n)) + "</span>";
   }
 
   function fieldOptions(sel) {
@@ -445,9 +479,11 @@
       html += '<div class="hero-meta">' + fieldChip(next.fk) + ' <span class="type-mono">at ' + hhmmss(next.playAt).replace(/:00$/, "") + (isoDate(next.playAt) !== today ? " · " + dayLabel(isoDate(next.playAt)) : "") + "</span></div>";
       html += '<blockquote class="hero-quote">“' + esc(clipText(next.key)) + "”</blockquote>";
     } else {
-      html += '<div class="hero-type">All quiet</div><p class="muted">No more announcements scheduled. Add games in the <a href="#" data-go="schedule">Schedule</a> tab.</p>';
+      html += '<div class="hero-type">All quiet</div><p class="muted">' + (!todayGames.length && dates().length
+        ? "Nothing left to announce. Is the schedule on the right date? See the notice below."
+        : 'No more announcements scheduled. Add games in the <a href="#" data-go="schedule">Schedule</a> tab.') + "</p>";
     }
-    html += '<img class="hero-sticker" src="img/jthrow_g.webp" alt="">';
+    html += '<img class="hero-sticker" src="' + art("img/jthrow_g.webp") + '" alt="">';
     if (!engine.isArmed()) html += '<button class="btn btn-big btn-lime hero-arm" type="button" data-act="arm">Start the jingle player</button>';
     html += "</div>";
 
@@ -473,7 +509,13 @@
     // --- fields
     html += '<h2 class="sec">' + (todayGames.length ? "Today · " + dayLabel(today, true) : "Fields") + "</h2>";
     if (!todayGames.length) {
-      html += '<div class="paper empty">No games today.' + (nextDay ? " Next game day: <b>" + dayLabel(nextDay, true) + "</b>. The player will announce automatically if this window stays open." : "") + "</div>";
+      var ds = dates();
+      html += '<div class="paper empty' + (nextDay ? "" : " empty-warn") + '"><b>No games today.</b> ' +
+        (ds.length ? "Your schedule has " + ds.map(function (d) { return "<b>Day " + dayNum(d) + " · " + dayLabel(d, true) + "</b>"; }).join(", ") + ". " : "") +
+        (nextDay ? "The player will announce automatically on that day if this window stays open. " : (ds.length ? "Nothing will be announced. If one of these days is today, move it here: " : "")) +
+        '<div class="btn-row">' + ds.map(function (d) {
+          return '<button class="btn' + (nextDay ? "" : " btn-lime") + '" type="button" data-act="move-today" data-from="' + d + '">Move Day ' + dayNum(d) + " (" + dayLabel(d) + ") to today</button>";
+        }).join("") + "</div></div>";
     } else {
       html += '<div class="fields">' + fieldState.map(renderFieldCard).join("") + "</div>";
     }
@@ -506,7 +548,7 @@
   function renderFieldCard(x, i) {
     var f = x.f, g = x.cur, nx = x.next, html = "";
     var col = FIELD_COLORS[(f.n - 1) % 4];
-    html += '<div class="field paper fc-' + col + '"><div class="field-head"><img src="' + HEADS[(f.n - 1) % 4] + '" alt=""><div><div class="field-name">' + esc(f.name) + '</div><div class="field-sub type-mono">Field ' + f.n + "</div></div></div>";
+    html += '<div class="field paper fc-' + col + '"><div class="field-head"><img src="' + art(HEADS[(f.n - 1) % 4]) + '" alt=""><div><div class="field-name">' + esc(f.name) + '</div><div class="field-sub type-mono">Field ' + f.n + "</div></div></div>";
     if (g) {
       var t0 = gameStart(g), t1 = gameEnd(g);
       html += '<div class="match">' + esc(g.label || "Game") + '</div><div class="note">' + esc(g.note || "") + "</div>";
@@ -550,8 +592,10 @@
     if (!schedDay || ds.indexOf(schedDay) < 0) schedDay = ds.indexOf(today) >= 0 ? today : (ds.find(function (d) { return d >= today; }) || ds[0] || today);
     var games = gamesOn(schedDay), bad = overlaps(schedDay);
     var html = '<div class="sched-top">';
-    html += '<div class="days">' + ds.map(function (d) {
-      return '<button type="button" class="day' + (d === schedDay ? " on" : "") + '" data-day="' + d + '">' + dayLabel(d) + (d === today ? ' <span class="today">today</span>' : "") + "</button>";
+    html += '<div class="days">' + ds.map(function (d, i) {
+      return '<div class="day-wrap"><button type="button" class="day' + (d === schedDay ? " on" : "") + '" data-day="' + d + '"><small>Day ' + (i + 1) + "</small> " + dayLabel(d) + (d === today ? ' <span class="today">today</span>' : "") + "</button>" +
+        '<button type="button" class="day-move" data-act="move-day" data-from="' + d + '" title="Change the date of Day ' + (i + 1) + '" aria-label="Change the date of Day ' + (i + 1) + '">📅</button>' +
+        '<input type="date" class="day-move-input" data-moveday="' + d + '" value="' + d + '" tabindex="-1" aria-hidden="true"></div>';
     }).join("") + '<label class="day day-add" title="Add a game day"><span>+ Day</span><input type="date" id="add-day"></label></div>';
     html += '<div class="sched-actions">' +
       '<button class="btn btn-lime" type="button" data-act="add-game">+ Add game</button>' +
@@ -609,7 +653,7 @@
     for (var m = Math.ceil(a / 60) * 60; m <= b; m += 60) html += '<span style="left:' + ((m - a) * PX_PER_MIN) + 'px">' + pad(m / 60) + ":00</span>";
     html += "</div>";
     state.settings.fields.forEach(function (f, i) {
-      html += '<div class="tl-lane" data-field="' + f.n + '"><div class="tl-name"><img src="' + HEADS[i % 4] + '" alt="">' + esc(f.name) + '</div><div class="tl-track" style="width:' + w + 'px">';
+      html += '<div class="tl-lane" data-field="' + f.n + '"><div class="tl-name"><img src="' + art(HEADS[i % 4]) + '" alt="">' + esc(f.name) + '</div><div class="tl-track" style="width:' + w + 'px">';
       for (var m = a; m <= b; m += 30) html += '<i class="grid' + (m % 60 ? " half" : "") + '" style="left:' + ((m - a) * PX_PER_MIN) + 'px"></i>';
       games.filter(function (g) { return g.field === f.n; }).forEach(function (g) {
         var x = (timeToMin(g.time) - a) * PX_PER_MIN, gw = g.dur * PX_PER_MIN;
@@ -683,8 +727,13 @@
   // ------------------------------------------------------------------ SETTINGS view
   function renderSettings() {
     var s = state.settings, el = $("#view-settings"), html = '<div class="settings-grid">';
+    // look
+    html += '<div class="paper set-card tilt-r"><div class="tape-label">Look</div><div class="seg seg-theme" role="radiogroup" aria-label="Look">' +
+      [["classic", "Classic"], ["halloween", "🎃 Halloween"]].map(function (o) {
+        return '<label><input type="radio" name="theme" value="' + o[0] + '"' + (theme() === o[0] ? " checked" : "") + "><span>" + o[1] + "</span></label>";
+      }).join("") + '</div><p class="muted small">Halloween also switches to spooky jingles (organ, thunder, ghost wails) with Halloween wording.</p></div>';
     // voice
-    html += '<div class="paper set-card tilt-l"><div class="tape-label">Announcer</div><div class="announcer-row"><img src="img/jrun_a_o.webp" alt=""><p>Same voice as Disc Fiction’s <em>Ultimate in a Minute</em> explainer.</p><button type="button" class="btn" data-act="test">🔊 Test sound</button></div>';
+    html += '<div class="paper set-card tilt-l"><div class="tape-label">Announcer</div><div class="announcer-row"><img src="' + art("img/jrun_a_o.webp") + '" alt=""><p>Same voice as Disc Fiction’s <em>Ultimate in a Minute</em> explainer.</p><button type="button" class="btn" data-act="test">🔊 Test sound</button></div>';
     html += '<label class="vol">Jingle volume <input type="range" id="vol" min="0" max="1" step="0.05" value="' + s.volume + '"><b id="vol-v">' + Math.round(s.volume * 100) + "%</b></label>";
     html += '<p class="muted small">Keep this at 100% and turn <b>Spotify</b> down to ~75% with its own slider, so the jingles stand out over the music. Jingles are already mastered extra-loud.</p></div>';
 
@@ -708,7 +757,7 @@
     // fields
     html += '<div class="paper set-card tilt-l"><div class="tape-label">Fields</div><p class="muted small">Announcements say “field one”, “field two”, … (up to 4). Names are only shown on screen.</p>';
     s.fields.forEach(function (f, i) {
-      html += '<div class="field-row"><img src="' + HEADS[i % 4] + '" alt=""><span class="type-mono">Field ' + f.n + '</span><input type="text" data-fieldname="' + f.n + '" value="' + esc(f.name) + '">' + (s.fields.length > 1 && i === s.fields.length - 1 ? '<button type="button" class="btn btn-xs btn-del" data-act="rm-field">✕</button>' : "") + "</div>";
+      html += '<div class="field-row"><img src="' + art(HEADS[i % 4]) + '" alt=""><span class="type-mono">Field ' + f.n + '</span><input type="text" data-fieldname="' + f.n + '" value="' + esc(f.name) + '">' + (s.fields.length > 1 && i === s.fields.length - 1 ? '<button type="button" class="btn btn-xs btn-del" data-act="rm-field">✕</button>' : "") + "</div>";
     });
     if (s.fields.length < 4) html += '<button class="btn btn-xs" type="button" data-act="add-field">+ Add field</button>';
     html += "</div>";
@@ -740,7 +789,6 @@
     renderAll();
   }
   function renderAll() {
-    $("#top-tournament").textContent = state.tournament || "";
     if (view === "live") renderLive(true);
     if (view === "schedule") keepFocus(renderSchedule);
     if (view === "settings") keepFocus(renderSettings);
@@ -823,6 +871,15 @@
         }, (g0.label || "Game") + " starts now" + (state.settings.ripple && delta > 0 ? " (later games on this field moved +" + Math.round(delta) + " min)" : ""));
         break;
       }
+      case "move-day": {
+        var inp = $('input[data-moveday="' + t.getAttribute("data-from") + '"]');
+        try { inp.showPicker(); } catch (err) {
+          var v = prompt("New date for Day " + dayNum(t.getAttribute("data-from")) + " (YYYY-MM-DD):", t.getAttribute("data-from"));
+          if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) moveDay(t.getAttribute("data-from"), v);
+        }
+        break;
+      }
+      case "move-today": moveDay(t.getAttribute("data-from"), today); break;
       case "add-game": {
         var gs = gamesOn(schedDay).filter(function (g) { return g.field === 1; });
         var last = gs[gs.length - 1], p = state.presets[0];
@@ -885,6 +942,7 @@
       });
       return;
     }
+    if (t.hasAttribute && t.hasAttribute("data-moveday")) { if (t.value) moveDay(t.getAttribute("data-moveday"), t.value); return; }
     if (t.id === "add-day" && t.value) {
       var p = state.presets[0], d = t.value;
       commit(function (s) { s.games.push({ id: uid(), date: d, time: "09:00", field: 1, preset: p.id, dur: p.dur, ht: p.ht, label: "", note: "", on: true }); }, "Day added");
@@ -895,6 +953,12 @@
     if (t.name === "sbf") { renderLive.sbf = t.value; return; }
     if (t.id === "ripple") { commit(function (s) { s.settings.ripple = t.checked; }); return; }
     if (t.hasAttribute && t.hasAttribute("data-jingle")) { var k = t.getAttribute("data-jingle"); commit(function (s) { s.settings.jingles[k] = t.checked; }); return; }
+    if (t.name === "theme") {
+      commit(function (s) { s.settings.theme = t.value; }, t.value === "halloween" ? "🎃 Halloween look on" : "Classic look on");
+      applyTheme();
+      engine.reload().then(replan);
+      return;
+    }
     if (t.name === "warnmin") { commit(function (s) { s.settings.warnMin = +t.value; }, "End-of-game warning: " + t.value + " minutes before the cap"); return; }
     if (t.id === "htbreak") { commit(function (s) { s.settings.htBreak = Math.max(1, +t.value || 2); }); return; }
     if (t.id === "merge") { commit(function (s) { s.settings.mergeFields = t.checked; }); return; }
@@ -1043,9 +1107,15 @@
   }
 
   // ------------------------------------------------------------------ boot
-  ransom($(".gate .ransom"), "JINGLE PLAYER");
-  ransom($(".top .ransom"), "JINGLE PLAYER", ["c-orange", "c-yellow", "c-paper", "c-kraft", "c-lime", "c-white"]);
-  $("#gate-tournament").textContent = state.tournament || "";
+  // static images in index.html carry data-art="<classic path>"; swap them for the current theme
+  function applyTheme() {
+    var h = theme() === "halloween";
+    document.body.classList.toggle("theme-halloween", h);
+    $$("img[data-art]").forEach(function (img) { img.src = art(img.getAttribute("data-art")); });
+    ransom($(".gate .ransom"), "JINGLE PLAYER", h ? ["c-orange", "c-black", "c-purple", "c-bone", "c-orange", "c-black"] : null);
+    ransom($(".top .ransom"), "JINGLE PLAYER", h ? ["c-orange", "c-purple", "c-bone", "c-orange"] : ["c-orange", "c-yellow", "c-paper", "c-kraft", "c-lime", "c-white"]);
+  }
+  applyTheme();
   if (!window.JINGLES) { toast("audio/jingles.js is missing. Run tools/generate_jingles.py"); }
   if (params.has("nogate")) $("#gate").style.display = "none";
   if (CLOCK_OFFSET) document.body.classList.add("rehearsal");

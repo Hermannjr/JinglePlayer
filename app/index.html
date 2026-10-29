@@ -15,13 +15,25 @@
 </head>
 <body>
 
+<!-- Halloween decorations (only shown with the Halloween look) -->
+<div class="spooky" aria-hidden="true">
+  <div class="moon"></div>
+  <img class="web web-l" src="img/halloween/web.svg" alt="">
+  <img class="web web-r" src="img/halloween/web.svg" alt="">
+  <img class="bat bat-1" src="img/halloween/bat.svg" alt="">
+  <img class="bat bat-2" src="img/halloween/bat.svg" alt="">
+  <img class="bat bat-3" src="img/halloween/bat.svg" alt="">
+  <img class="pumpkin pumpkin-l" src="img/halloween/pumpkin.svg" alt="">
+  <img class="pumpkin pumpkin-r" src="img/halloween/pumpkin.svg" alt="">
+</div>
+
 <!-- ============ start overlay ============ -->
 <div id="gate" class="gate">
   <div class="gate-card paper">
-    <img class="gate-logo" src="img/logo.webp" alt="Disc Fiction Ultimate">
+    <img class="gate-pumpkin" src="img/halloween/pumpkin.svg" alt="">
+    <img class="gate-logo" src="img/logo.webp" data-art="img/logo.webp" alt="Disc Fiction Ultimate">
     <div class="tape-label">Disc Fiction presents</div>
     <h1 class="ransom" aria-label="Jingle Player"></h1>
-    <p class="gate-sub" id="gate-tournament"></p>
     <ul class="checklist">
       <li><b>Laptop volume 100%</b>, Spotify's own slider at ~75%</li>
       <li>Laptop <b>plugged in</b>; leave this window open</li>
@@ -33,16 +45,15 @@
     </div>
     <p class="fine">Browsers only allow sound after a click, which is why this button is here.</p>
   </div>
-  <img class="gate-sticker s1" src="img/jthrow_g.webp" alt="">
-  <img class="gate-sticker s2" src="img/vlay_b_o.webp" alt="">
+  <img class="gate-sticker s1" src="img/jthrow_g.webp" data-art="img/jthrow_g.webp" alt="">
+  <img class="gate-sticker s2" src="img/vlay_b_o.webp" data-art="img/vlay_b_o.webp" alt="">
 </div>
 
 <!-- ============ header ============ -->
 <header class="top">
-  <img class="top-logo" src="img/logo.webp" alt="Disc Fiction">
+  <img class="top-logo" src="img/logo.webp" data-art="img/logo.webp" alt="Disc Fiction">
   <div class="top-title">
     <div class="ransom ransom-sm" aria-label="Jingle Player"></div>
-    <div class="top-tournament" id="top-tournament"></div>
   </div>
   <nav class="tabs" role="tablist">
     <button class="tab" data-view="live" role="tab" type="button">Live</button>
@@ -64,7 +75,7 @@
 <!-- speech bubble shown while a jingle plays -->
 <div class="announcer" id="announcer" aria-live="polite">
   <div class="bubble" id="announcer-text"></div>
-  <img src="img/jjump_b_g.webp" alt="">
+  <img src="img/jjump_b_g.webp" data-art="img/jjump_b_g.webp" alt="">
 </div>
 
 <div class="toast" id="toast" role="status"></div>
