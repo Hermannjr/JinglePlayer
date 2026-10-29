@@ -61,3 +61,4 @@ tools/models/
 dist/site/
 tools/.venv/
 tools/art-raw/
+tools/tts-cache/

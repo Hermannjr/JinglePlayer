@@ -3,8 +3,9 @@
 Each clip = synthesized sting (fanfare / chime / air horn / whistle) + voice line,
 compressed and loudness-normalised hot so it cuts through background music.
 
-Voice: Kokoro TTS (local, free) with voice af_heart at speed 0.96, the same as the
-"Ultimate in a Minute" explainer video.
+Voices: classic set = Kokoro TTS (local, free), voice af_heart at speed 0.96, the same as the
+"Ultimate in a Minute" explainer video. Halloween set = OpenAI gpt-audio (voice "onyx", spooky
+horror-host direction) via OpenRouter; needs OPENROUTER_API_KEY, recordings cached in tools/tts-cache/.
 
 Model files (not in the repo, ~350 MB) from
 https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0 :
@@ -19,11 +20,12 @@ Output:
 Usage:  pip install -r tools/requirements.txt && python tools/generate_jingles.py
 Edit LINES below to change the wording, then re-run (and python tools/build.py).
 """
-import base64, json, os, subprocess
+import base64, hashlib, json, os, re, subprocess
 from pathlib import Path
 
 import imageio_ffmpeg
 import numpy as np
+import requests
 from kokoro_onnx import Kokoro
 from scipy.signal import butter, resample_poly, sosfilt
 
@@ -224,6 +226,62 @@ def tts(kokoro, text):
     return resample_poly(np.asarray(a, dtype=np.float64), SR, sr)
 
 
+# Halloween voice: OpenAI gpt-audio via OpenRouter (needs OPENROUTER_API_KEY; a few cents per run).
+# Recordings are cached in tools/tts-cache/ so re-running only pays for changed lines.
+GPT_MODEL, GPT_VOICE = "openai/gpt-audio", "onyx"
+GPT_STYLE = ("You are a fast-talking Halloween stadium announcer with a deep, spooky horror-movie-host voice. "
+             "Speak quickly and energetically, about as fast as a sports announcer, with only very short pauses. "
+             "Do not laugh, do not add sound effects or extra words. Read the user's line exactly as written and nothing else.")
+CACHE = Path(__file__).resolve().parent / "tts-cache"
+
+
+def _words(t):
+    return re.sub(r"[^a-z0-9 ]", "", t.lower().replace("-", " ")).split()
+
+
+def _gpt_request(text):
+    body = {"model": GPT_MODEL, "modalities": ["text", "audio"], "audio": {"voice": GPT_VOICE, "format": "pcm16"}, "stream": True,
+            "messages": [{"role": "system", "content": GPT_STYLE}, {"role": "user", "content": text}]}
+    r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=body, stream=True, timeout=180,
+                      headers={"Authorization": "Bearer " + os.environ["OPENROUTER_API_KEY"]})
+    r.raise_for_status()
+    pcm, said = b"", ""
+    for line in r.iter_lines():
+        if not line.startswith(b"data: ") or line == b"data: [DONE]":
+            continue
+        for ch in json.loads(line[6:]).get("choices", []):
+            a = (ch.get("delta") or {}).get("audio") or {}
+            pcm += base64.b64decode(a["data"]) if a.get("data") else b""
+            said += a.get("transcript") or ""
+    return pcm, said
+
+
+def shorten_pauses(a, sr, longest=0.3, keep=0.22):
+    env = np.convolve(np.abs(a), np.ones(sr // 100) / (sr // 100), "same")
+    quiet = env < 0.02 * env.max()
+    edges = np.flatnonzero(np.diff(quiet.astype(int))) + 1
+    runs = np.split(np.arange(len(a)), edges)
+    out = [a[r[:int(keep * sr)]] if quiet[r[0]] and len(r) > longest * sr else a[r] for r in runs if len(r)]
+    return np.concatenate(out)
+
+
+def gpt_tts(text):
+    CACHE.mkdir(exist_ok=True)
+    f = CACHE / (hashlib.sha256(f"{GPT_MODEL}|{GPT_VOICE}|{GPT_STYLE}|{text}".encode()).hexdigest()[:20] + ".pcm")
+    if not f.exists():
+        for attempt in range(4):
+            pcm, said = _gpt_request(text)
+            secs = len(pcm) / 48000
+            if _words(said) == _words(text) and secs < 2 + len(text.split()) * 0.55:
+                break
+            print(f"   retry ({secs:.1f}s): {said!r}")
+        else:
+            raise RuntimeError(f"gpt-audio kept going off-script for: {text}")
+        f.write_bytes(pcm)
+    a = np.frombuffer(f.read_bytes(), dtype="<i2").astype(np.float64) / 32768
+    return resample_poly(shorten_pauses(a, 24000), SR, 24000)
+
+
 def master(x, out_mp3):
     pcm = (np.clip(x, -1, 1) * 32767).astype("<i2").tobytes()
     af = ("highpass=f=90,acompressor=threshold=-20dB:ratio=3:attack=5:release=90:makeup=2,"
@@ -238,11 +296,11 @@ def master(x, out_mp3):
 def main():
     kokoro = Kokoro(str(MODELS / "kokoro-v1.0.onnx"), str(MODELS / "voices-v1.0.bin"))
     sets = {  # name inside jingles.js -> (lines, test line, sting maker)
-        "voice": (LINES, TEST_LINE, sting),
-        "halloween": (HALLOWEEN_LINES, HALLOWEEN_TEST, spooky_sting),
+        "voice": (LINES, TEST_LINE, sting, lambda t: tts(kokoro, t)),
+        "halloween": (HALLOWEEN_LINES, HALLOWEEN_TEST, spooky_sting, gpt_tts),
     }
     bundle = {"voices": {}, "text": {}, "duration": {}}
-    for name, (lines, test_line, make_sting) in sets.items():
+    for name, (lines, test_line, make_sting, speak) in sets.items():
         jobs = []  # (key, text, event)
         for ev, line in lines.items():
             for fk, fname in FIELDS.items():
@@ -253,7 +311,7 @@ def main():
             bundle[k][name] = {}
         (OUT / name).mkdir(parents=True, exist_ok=True)
         for key, text, ev in jobs:
-            v = norm(trim(tts(kokoro, text)), 0.9)
+            v = norm(trim(speak(text)), 0.9)
             s = stings[ev] * (0.7 if ev == "end" else 0.85)
             clip = place([(0, s), (len(s) / SR + 0.12, v)])
             clip = np.concatenate([np.zeros(int(0.05 * SR)), clip, np.zeros(int(0.25 * SR))])
