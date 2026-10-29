@@ -388,6 +388,18 @@
     });
     return n;
   }
+  function dayNum(date) { return dates().indexOf(date) + 1; }
+  // move every game of one day to another date
+  function moveDay(from, to) {
+    if (!to || to === from) return;
+    var clash = state.games.some(function (g) { return g.date === to; });
+    if (clash && !confirm("There are already games on " + dayLabel(to, true) + ". Move Day " + dayNum(from) + " there anyway and combine the two days?")) { renderAll(); return; }
+    var n = dayNum(from);
+    commit(function (s) { s.games.forEach(function (g) { if (g.date === from) g.date = to; }); },
+      "Day " + n + " moved from " + dayLabel(from) + " to " + dayLabel(to, true));
+    schedDay = to;
+    if (view === "schedule") renderSchedule();
+  }
   function findGame(s, id) { return s.games.find(function (g) { return g.id === id; }); }
 
   // ------------------------------------------------------------------ rendering helpers
@@ -467,7 +479,9 @@
       html += '<div class="hero-meta">' + fieldChip(next.fk) + ' <span class="type-mono">at ' + hhmmss(next.playAt).replace(/:00$/, "") + (isoDate(next.playAt) !== today ? " · " + dayLabel(isoDate(next.playAt)) : "") + "</span></div>";
       html += '<blockquote class="hero-quote">“' + esc(clipText(next.key)) + "”</blockquote>";
     } else {
-      html += '<div class="hero-type">All quiet</div><p class="muted">No more announcements scheduled. Add games in the <a href="#" data-go="schedule">Schedule</a> tab.</p>';
+      html += '<div class="hero-type">All quiet</div><p class="muted">' + (!todayGames.length && dates().length
+        ? "Nothing left to announce. Is the schedule on the right date? See the notice below."
+        : 'No more announcements scheduled. Add games in the <a href="#" data-go="schedule">Schedule</a> tab.') + "</p>";
     }
     html += '<img class="hero-sticker" src="' + art("img/jthrow_g.webp") + '" alt="">';
     if (!engine.isArmed()) html += '<button class="btn btn-big btn-lime hero-arm" type="button" data-act="arm">Start the jingle player</button>';
@@ -495,7 +509,13 @@
     // --- fields
     html += '<h2 class="sec">' + (todayGames.length ? "Today · " + dayLabel(today, true) : "Fields") + "</h2>";
     if (!todayGames.length) {
-      html += '<div class="paper empty">No games today.' + (nextDay ? " Next game day: <b>" + dayLabel(nextDay, true) + "</b>. The player will announce automatically if this window stays open." : "") + "</div>";
+      var ds = dates();
+      html += '<div class="paper empty' + (nextDay ? "" : " empty-warn") + '"><b>No games today.</b> ' +
+        (ds.length ? "Your schedule has " + ds.map(function (d) { return "<b>Day " + dayNum(d) + " · " + dayLabel(d, true) + "</b>"; }).join(", ") + ". " : "") +
+        (nextDay ? "The player will announce automatically on that day if this window stays open. " : (ds.length ? "Nothing will be announced. If one of these days is today, move it here: " : "")) +
+        '<div class="btn-row">' + ds.map(function (d) {
+          return '<button class="btn' + (nextDay ? "" : " btn-lime") + '" type="button" data-act="move-today" data-from="' + d + '">Move Day ' + dayNum(d) + " (" + dayLabel(d) + ") to today</button>";
+        }).join("") + "</div></div>";
     } else {
       html += '<div class="fields">' + fieldState.map(renderFieldCard).join("") + "</div>";
     }
@@ -572,8 +592,10 @@
     if (!schedDay || ds.indexOf(schedDay) < 0) schedDay = ds.indexOf(today) >= 0 ? today : (ds.find(function (d) { return d >= today; }) || ds[0] || today);
     var games = gamesOn(schedDay), bad = overlaps(schedDay);
     var html = '<div class="sched-top">';
-    html += '<div class="days">' + ds.map(function (d) {
-      return '<button type="button" class="day' + (d === schedDay ? " on" : "") + '" data-day="' + d + '">' + dayLabel(d) + (d === today ? ' <span class="today">today</span>' : "") + "</button>";
+    html += '<div class="days">' + ds.map(function (d, i) {
+      return '<div class="day-wrap"><button type="button" class="day' + (d === schedDay ? " on" : "") + '" data-day="' + d + '"><small>Day ' + (i + 1) + "</small> " + dayLabel(d) + (d === today ? ' <span class="today">today</span>' : "") + "</button>" +
+        '<button type="button" class="day-move" data-act="move-day" data-from="' + d + '" title="Change the date of Day ' + (i + 1) + '" aria-label="Change the date of Day ' + (i + 1) + '">📅</button>' +
+        '<input type="date" class="day-move-input" data-moveday="' + d + '" value="' + d + '" tabindex="-1" aria-hidden="true"></div>';
     }).join("") + '<label class="day day-add" title="Add a game day"><span>+ Day</span><input type="date" id="add-day"></label></div>';
     html += '<div class="sched-actions">' +
       '<button class="btn btn-lime" type="button" data-act="add-game">+ Add game</button>' +
@@ -849,6 +871,15 @@
         }, (g0.label || "Game") + " starts now" + (state.settings.ripple && delta > 0 ? " (later games on this field moved +" + Math.round(delta) + " min)" : ""));
         break;
       }
+      case "move-day": {
+        var inp = $('input[data-moveday="' + t.getAttribute("data-from") + '"]');
+        try { inp.showPicker(); } catch (err) {
+          var v = prompt("New date for Day " + dayNum(t.getAttribute("data-from")) + " (YYYY-MM-DD):", t.getAttribute("data-from"));
+          if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) moveDay(t.getAttribute("data-from"), v);
+        }
+        break;
+      }
+      case "move-today": moveDay(t.getAttribute("data-from"), today); break;
       case "add-game": {
         var gs = gamesOn(schedDay).filter(function (g) { return g.field === 1; });
         var last = gs[gs.length - 1], p = state.presets[0];
@@ -911,6 +942,7 @@
       });
       return;
     }
+    if (t.hasAttribute && t.hasAttribute("data-moveday")) { if (t.value) moveDay(t.getAttribute("data-moveday"), t.value); return; }
     if (t.id === "add-day" && t.value) {
       var p = state.presets[0], d = t.value;
       commit(function (s) { s.games.push({ id: uid(), date: d, time: "09:00", field: 1, preset: p.id, dur: p.dur, ht: p.ht, label: "", note: "", on: true }); }, "Day added");

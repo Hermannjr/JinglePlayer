@@ -35,6 +35,8 @@ game pushes the rest of that field's day along with it.
   copy, and paste it in. Teams, fields, dates and times are recognised, and you choose the game type
   (length + halftime minute) for group and play-off games.
 * Or add games by hand with **+ Add game**, or use **+ Day** to add another day.
+* **Wrong date?** Click the 📅 next to a day tab to move all of that day's games to another date. If
+  nothing is scheduled today, the Live tab says so and offers **Move Day N to today**.
 * **Settings → Look**: **Classic** or **🎃 Halloween**. Halloween dresses Jules up as a vampire and Vincent as
   a ghost, adds pumpkins, bats and webs, and switches to spooky jingles (organ, thunder, ghost wail, with
   Halloween wording). It's the default right now; switch back to Classic after the tournament.
