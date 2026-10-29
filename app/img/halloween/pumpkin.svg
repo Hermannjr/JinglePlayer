@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 220">
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <!-- sticker border -->
+    <path d="M120 40c-8-22 4-34 22-36l6 14c-10 2-14 10-12 22 34-8 92 8 92 82 0 70-56 92-108 92S12 192 12 122c0-74 58-90 92-82" fill="#fff" stroke="#fff" stroke-width="22"/>
+    <!-- stem -->
+    <path d="M118 46c-6-18 4-30 20-32l6 12c-9 2-12 9-10 20z" fill="#5f8a2e" stroke="#15110d" stroke-width="9"/>
+    <!-- body -->
+    <path d="M120 44c34-10 98 4 98 78 0 66-52 86-98 86S22 188 22 122c0-74 64-88 98-78z" fill="#f07f2b" stroke="#15110d" stroke-width="10"/>
+    <path d="M86 50c-26 22-30 120 0 154M154 50c26 22 30 120 0 154M120 46v160" fill="none" stroke="#c45a17" stroke-width="7"/>
+    <!-- face -->
+    <path d="M64 104l26-28 22 30z M128 106l24-30 24 28z" fill="#ffd34d" stroke="#15110d" stroke-width="8"/>
+    <path d="M56 138c20 24 108 24 128 0l-6 22-16-6-10 18-14-14-18 16-14-16-14 14-10-18-16 6z" fill="#ffd34d" stroke="#15110d" stroke-width="8"/>
+  </g>
+</svg>

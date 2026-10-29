@@ -21,6 +21,17 @@
   };
   var TYPE_PRIORITY = { end: 0, halftime: 1, halftime_over: 2, five: 3, two: 3, start: 4 };
   var HEADS = ["img/head_jules.webp", "img/head_vincent.webp", "img/head_jules.webp", "img/head_vincent.webp"];
+  // Look: "classic" or "halloween". Saved states without a theme get DEFAULT_THEME.
+  var DEFAULT_THEME = "halloween";
+  var HALLOWEEN_ART = {
+    "img/logo.webp": "img/halloween/logo.webp",
+    "img/jthrow_g.webp": "img/halloween/vampire.webp",
+    "img/vlay_b_o.webp": "img/halloween/ghost_dive.webp",
+    "img/jjump_b_g.webp": "img/halloween/ghost_dive.webp",
+    "img/jrun_a_o.webp": "img/halloween/ghost.webp",
+    "img/head_jules.webp": "img/halloween/head_vampire.webp",
+    "img/head_vincent.webp": "img/halloween/head_ghost.webp"
+  };
   var FIELD_COLORS = ["lime", "orange", "yellow", "teal"];
   var DAYNAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -119,7 +130,12 @@
   function warnMin() { return state.settings.warnMin === 2 ? 2 : 5; }
   function warnType() { return warnMin() === 2 ? "two" : "five"; }
   // the single announcer clip set in audio/jingles.js
-  function voiceSet() { return window.JINGLES ? Object.keys(JINGLES.voices)[0] : null; }
+  function theme() { return state.settings.theme === "classic" || state.settings.theme === "halloween" ? state.settings.theme : DEFAULT_THEME; }
+  function art(path) { return theme() === "halloween" && HALLOWEEN_ART[path] || path; }
+  function voiceSet() {
+    if (!window.JINGLES) return null;
+    return theme() === "halloween" && JINGLES.voices.halloween ? "halloween" : "voice";
+  }
   function clipDuration(key) {
     var d = window.JINGLES && JINGLES.duration[voiceSet()];
     return (d && d[key]) || 8;
@@ -328,6 +344,12 @@
         go();
         return Promise.resolve();
       },
+      // switch clip set (theme change): re-decode and reschedule
+      reload: function () {
+        if (!armed) return Promise.resolve();
+        cancelPending();
+        return decodeVoice(voiceSet()).then(tick);
+      },
       setVolume: function (v) { if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05); }
     };
   })();
@@ -397,7 +419,7 @@
   function fieldChip(fk) {
     if (fk === "all") return '<span class="chip chip-all">All fields</span>';
     var n = +fk, i = (n - 1) % 4;
-    return '<span class="chip chip-' + FIELD_COLORS[i] + '"><img src="' + HEADS[i] + '" alt="">' + esc(fieldName(n)) + "</span>";
+    return '<span class="chip chip-' + FIELD_COLORS[i] + '"><img src="' + art(HEADS[i]) + '" alt="">' + esc(fieldName(n)) + "</span>";
   }
 
   function fieldOptions(sel) {
@@ -447,7 +469,7 @@
     } else {
       html += '<div class="hero-type">All quiet</div><p class="muted">No more announcements scheduled. Add games in the <a href="#" data-go="schedule">Schedule</a> tab.</p>';
     }
-    html += '<img class="hero-sticker" src="img/jthrow_g.webp" alt="">';
+    html += '<img class="hero-sticker" src="' + art("img/jthrow_g.webp") + '" alt="">';
     if (!engine.isArmed()) html += '<button class="btn btn-big btn-lime hero-arm" type="button" data-act="arm">Start the jingle player</button>';
     html += "</div>";
 
@@ -506,7 +528,7 @@
   function renderFieldCard(x, i) {
     var f = x.f, g = x.cur, nx = x.next, html = "";
     var col = FIELD_COLORS[(f.n - 1) % 4];
-    html += '<div class="field paper fc-' + col + '"><div class="field-head"><img src="' + HEADS[(f.n - 1) % 4] + '" alt=""><div><div class="field-name">' + esc(f.name) + '</div><div class="field-sub type-mono">Field ' + f.n + "</div></div></div>";
+    html += '<div class="field paper fc-' + col + '"><div class="field-head"><img src="' + art(HEADS[(f.n - 1) % 4]) + '" alt=""><div><div class="field-name">' + esc(f.name) + '</div><div class="field-sub type-mono">Field ' + f.n + "</div></div></div>";
     if (g) {
       var t0 = gameStart(g), t1 = gameEnd(g);
       html += '<div class="match">' + esc(g.label || "Game") + '</div><div class="note">' + esc(g.note || "") + "</div>";
@@ -609,7 +631,7 @@
     for (var m = Math.ceil(a / 60) * 60; m <= b; m += 60) html += '<span style="left:' + ((m - a) * PX_PER_MIN) + 'px">' + pad(m / 60) + ":00</span>";
     html += "</div>";
     state.settings.fields.forEach(function (f, i) {
-      html += '<div class="tl-lane" data-field="' + f.n + '"><div class="tl-name"><img src="' + HEADS[i % 4] + '" alt="">' + esc(f.name) + '</div><div class="tl-track" style="width:' + w + 'px">';
+      html += '<div class="tl-lane" data-field="' + f.n + '"><div class="tl-name"><img src="' + art(HEADS[i % 4]) + '" alt="">' + esc(f.name) + '</div><div class="tl-track" style="width:' + w + 'px">';
       for (var m = a; m <= b; m += 30) html += '<i class="grid' + (m % 60 ? " half" : "") + '" style="left:' + ((m - a) * PX_PER_MIN) + 'px"></i>';
       games.filter(function (g) { return g.field === f.n; }).forEach(function (g) {
         var x = (timeToMin(g.time) - a) * PX_PER_MIN, gw = g.dur * PX_PER_MIN;
@@ -683,8 +705,13 @@
   // ------------------------------------------------------------------ SETTINGS view
   function renderSettings() {
     var s = state.settings, el = $("#view-settings"), html = '<div class="settings-grid">';
+    // look
+    html += '<div class="paper set-card tilt-r"><div class="tape-label">Look</div><div class="seg seg-theme" role="radiogroup" aria-label="Look">' +
+      [["classic", "Classic"], ["halloween", "🎃 Halloween"]].map(function (o) {
+        return '<label><input type="radio" name="theme" value="' + o[0] + '"' + (theme() === o[0] ? " checked" : "") + "><span>" + o[1] + "</span></label>";
+      }).join("") + '</div><p class="muted small">Halloween also switches to spooky jingles (organ, thunder, ghost wails) with Halloween wording.</p></div>';
     // voice
-    html += '<div class="paper set-card tilt-l"><div class="tape-label">Announcer</div><div class="announcer-row"><img src="img/jrun_a_o.webp" alt=""><p>Same voice as Disc Fiction’s <em>Ultimate in a Minute</em> explainer.</p><button type="button" class="btn" data-act="test">🔊 Test sound</button></div>';
+    html += '<div class="paper set-card tilt-l"><div class="tape-label">Announcer</div><div class="announcer-row"><img src="' + art("img/jrun_a_o.webp") + '" alt=""><p>Same voice as Disc Fiction’s <em>Ultimate in a Minute</em> explainer.</p><button type="button" class="btn" data-act="test">🔊 Test sound</button></div>';
     html += '<label class="vol">Jingle volume <input type="range" id="vol" min="0" max="1" step="0.05" value="' + s.volume + '"><b id="vol-v">' + Math.round(s.volume * 100) + "%</b></label>";
     html += '<p class="muted small">Keep this at 100% and turn <b>Spotify</b> down to ~75% with its own slider, so the jingles stand out over the music. Jingles are already mastered extra-loud.</p></div>';
 
@@ -708,7 +735,7 @@
     // fields
     html += '<div class="paper set-card tilt-l"><div class="tape-label">Fields</div><p class="muted small">Announcements say “field one”, “field two”, … (up to 4). Names are only shown on screen.</p>';
     s.fields.forEach(function (f, i) {
-      html += '<div class="field-row"><img src="' + HEADS[i % 4] + '" alt=""><span class="type-mono">Field ' + f.n + '</span><input type="text" data-fieldname="' + f.n + '" value="' + esc(f.name) + '">' + (s.fields.length > 1 && i === s.fields.length - 1 ? '<button type="button" class="btn btn-xs btn-del" data-act="rm-field">✕</button>' : "") + "</div>";
+      html += '<div class="field-row"><img src="' + art(HEADS[i % 4]) + '" alt=""><span class="type-mono">Field ' + f.n + '</span><input type="text" data-fieldname="' + f.n + '" value="' + esc(f.name) + '">' + (s.fields.length > 1 && i === s.fields.length - 1 ? '<button type="button" class="btn btn-xs btn-del" data-act="rm-field">✕</button>' : "") + "</div>";
     });
     if (s.fields.length < 4) html += '<button class="btn btn-xs" type="button" data-act="add-field">+ Add field</button>';
     html += "</div>";
@@ -895,6 +922,12 @@
     if (t.name === "sbf") { renderLive.sbf = t.value; return; }
     if (t.id === "ripple") { commit(function (s) { s.settings.ripple = t.checked; }); return; }
     if (t.hasAttribute && t.hasAttribute("data-jingle")) { var k = t.getAttribute("data-jingle"); commit(function (s) { s.settings.jingles[k] = t.checked; }); return; }
+    if (t.name === "theme") {
+      commit(function (s) { s.settings.theme = t.value; }, t.value === "halloween" ? "🎃 Halloween look on" : "Classic look on");
+      applyTheme();
+      engine.reload().then(replan);
+      return;
+    }
     if (t.name === "warnmin") { commit(function (s) { s.settings.warnMin = +t.value; }, "End-of-game warning: " + t.value + " minutes before the cap"); return; }
     if (t.id === "htbreak") { commit(function (s) { s.settings.htBreak = Math.max(1, +t.value || 2); }); return; }
     if (t.id === "merge") { commit(function (s) { s.settings.mergeFields = t.checked; }); return; }
@@ -1043,8 +1076,15 @@
   }
 
   // ------------------------------------------------------------------ boot
-  ransom($(".gate .ransom"), "JINGLE PLAYER");
-  ransom($(".top .ransom"), "JINGLE PLAYER", ["c-orange", "c-yellow", "c-paper", "c-kraft", "c-lime", "c-white"]);
+  // static images in index.html carry data-art="<classic path>"; swap them for the current theme
+  function applyTheme() {
+    var h = theme() === "halloween";
+    document.body.classList.toggle("theme-halloween", h);
+    $$("img[data-art]").forEach(function (img) { img.src = art(img.getAttribute("data-art")); });
+    ransom($(".gate .ransom"), "JINGLE PLAYER", h ? ["c-orange", "c-black", "c-purple", "c-bone", "c-orange", "c-black"] : null);
+    ransom($(".top .ransom"), "JINGLE PLAYER", h ? ["c-orange", "c-purple", "c-bone", "c-orange"] : ["c-orange", "c-yellow", "c-paper", "c-kraft", "c-lime", "c-white"]);
+  }
+  applyTheme();
   $("#gate-tournament").textContent = state.tournament || "";
   if (!window.JINGLES) { toast("audio/jingles.js is missing. Run tools/generate_jingles.py"); }
   if (params.has("nogate")) $("#gate").style.display = "none";

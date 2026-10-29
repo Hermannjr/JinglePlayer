@@ -12,7 +12,8 @@ https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0 :
 Put them in tools/models/ or point KOKORO_DIR at their folder.
 
 Output:
-  app/audio/voice/<event>_<field>.mp3   (individual files, handy for checking)
+  app/audio/voice/<event>_<field>.mp3       classic set (individual files, handy for checking)
+  app/audio/halloween/<event>_<field>.mp3   Halloween theme set
   app/audio/jingles.js                  (everything base64-inlined, loaded by the app)
 
 Usage:  pip install -r tools/requirements.txt && python tools/generate_jingles.py
@@ -32,7 +33,6 @@ OUT = ROOT / "app" / "audio"
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 MODELS = Path(os.environ.get("KOKORO_DIR", Path(__file__).resolve().parent / "models"))
 VOICE, SPEED = "af_heart", 0.96
-SET = "voice"  # name of the clip set inside jingles.js
 
 FIELDS = {"1": "field one", "2": "field two", "3": "field three", "4": "field four", "all": "all fields"}
 
@@ -46,6 +46,17 @@ LINES = {
     "end": "Time is up on {f}! That's the cap. Finish the point in play, and don't forget your spirit circle.",
 }
 TEST_LINE = "Testing, one, two. The Disc Fiction jingle player is ready!"
+
+# Halloween theme: same voice, spooky wording (and spooky stings, see spooky_sting)
+HALLOWEEN_LINES = {
+    "start": "Attention, {f}! Time is running... Pull when ready, if you dare. Have a spooktacular game!",
+    "five": "Five minutes left on {f}! Five minutes to go... the end is near!",
+    "two": "Two minutes left on {f}! Two minutes to go... the end is near!",
+    "halftime": "Halftime on {f}! Finish the point in play, then rest your bones for two minutes.",
+    "halftime_over": "{F}, halftime is over! Rise from the dead, and get back on the line.",
+    "end": "Time is up on {f}! That's the cap. Finish the point in play, and don't forget your spirit circle. Boo!",
+}
+HALLOWEEN_TEST = "Testing, one, two. The Disc Fiction jingle player has risen from the grave!"
 
 # ---------------------------------------------------------------- synthesis helpers
 
@@ -145,6 +156,56 @@ def sting(event):
         return norm(place(parts, 1.2))
     raise ValueError(event)
 
+# ---------------------------------------------------------------- spooky stings (Halloween theme)
+
+def organ(freq, dur):
+    t = t_axis(dur)
+    x = sum(a * np.sin(2 * np.pi * freq * m * t) for m, a in [(0.5, .5), (1, 1), (2, .6), (3, .3), (4, .35), (6, .15), (8, .12)])
+    x *= 1 + 0.06 * np.sin(2 * np.pi * 6 * t)  # tremulant
+    return x * adsr(len(t), 0.02, 0.05, 0.85, min(0.25, dur / 3))
+
+
+def toll(freq, dur):  # deep church bell
+    t = t_axis(dur)
+    parts = [(0.5, .6, 2.5), (1, 1.0, 1.8), (1.19, .45, 1.2), (1.5, .35, 1.0), (2.0, .4, .8), (2.74, .2, .5), (3.76, .1, .3)]
+    return sum(a * np.sin(2 * np.pi * freq * r * t) * np.exp(-t / d) for r, a, d in parts) * np.clip(t / 0.004, 0, 1)
+
+
+def thunder(dur, seed=7):
+    rng = np.random.default_rng(seed)
+    t = t_axis(dur)
+    crack = bandpass(rng.standard_normal(len(t)), 800, 6000) * np.exp(-t / 0.08)
+    rumble = lowpass(rng.standard_normal(len(t)), 180, 4) * 6
+    rumble *= (np.clip(t / 0.05, 0, 1) * np.exp(-t / 0.9)) * (1 + 0.5 * np.sin(2 * np.pi * 2.3 * t) ** 2)
+    return crack + rumble
+
+
+def theremin(f0, f1, dur):  # ghostly "ooo-OOO" wail
+    t = t_axis(dur)
+    glide = f0 + (f1 - f0) * np.sin(np.pi * t / dur * 0.85)
+    f = glide * (1 + 0.025 * np.sin(2 * np.pi * 5.5 * t))
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.2 * np.sin(4 * np.pi * np.cumsum(f) / SR)
+    return x * adsr(len(t), 0.15, 0.1, 0.85, 0.3)
+
+
+def spooky_sting(event):
+    n = lambda m: 440 * 2 ** ((m - 69) / 12)
+    if event == "start":  # organ mordent + D-minor chord ("dun-dun-dunnn")
+        parts = [(0.00, organ(n(81), 0.12)), (0.12, organ(n(79), 0.12)), (0.24, organ(n(81), 0.5))]
+        parts += [(0.85, organ(n(m), 1.1) * .7) for m in (50, 62, 65, 69)]
+        return norm(place(parts))
+    if event in ("five", "two"):  # two tolls of a deep bell
+        return norm(place([(0, toll(n(57), 1.6)), (0.8, toll(n(57), 1.6))], 2.0))
+    if event == "end":  # thunderclap under a low organ chord
+        return norm(place([(0, thunder(2.0))] + [(0.15, organ(n(m), 1.3) * .35) for m in (38, 50, 53, 57)]))
+    if event == "halftime":  # ghost wail
+        return norm(place([(0, theremin(n(64), n(76), 1.4))]), 0.8)
+    if event == "halftime_over":  # rising organ arpeggio
+        return norm(place([(i * 0.16, organ(n(m), 0.5 if i < 3 else 0.8)) for i, m in enumerate([62, 65, 69, 74])]))
+    if event == "test":
+        return norm(place([(0, theremin(n(69), n(74), 0.9))]), 0.8)
+    raise ValueError(event)
+
 # ---------------------------------------------------------------- voice
 
 def decode(path):
@@ -166,7 +227,7 @@ def tts(kokoro, text):
 def master(x, out_mp3):
     pcm = (np.clip(x, -1, 1) * 32767).astype("<i2").tobytes()
     af = ("highpass=f=90,acompressor=threshold=-20dB:ratio=3:attack=5:release=90:makeup=2,"
-          "loudnorm=I=-11:TP=-1.0:LRA=8,alimiter=limit=0.94:level=false")
+          "loudnorm=I=-11:TP=-1.0:LRA=8,alimiter=limit=0.89:level=false")
     subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "s16le", "-ar", str(SR), "-ac", "1", "-i", "-",
                     "-af", af, "-ar", str(SR), "-ac", "1", "-c:a", "libmp3lame", "-b:a", "96k", str(out_mp3)],
                    input=pcm, check=True)
@@ -176,26 +237,32 @@ def master(x, out_mp3):
 
 def main():
     kokoro = Kokoro(str(MODELS / "kokoro-v1.0.onnx"), str(MODELS / "voices-v1.0.bin"))
-    jobs = []  # (key, text, event)
-    for ev, line in LINES.items():
-        for fk, fname in FIELDS.items():
-            jobs.append((f"{ev}_{fk}", line.replace("{f}", fname).replace("{F}", fname[0].upper() + fname[1:]), ev))
-    jobs.append(("test", TEST_LINE, "test"))
-
-    stings = {ev: sting(ev) for ev in ["start", "five", "two", "end", "halftime", "halftime_over", "test"]}
-    bundle = {"voices": {SET: {}}, "text": {SET: {}}, "duration": {SET: {}}}
-    (OUT / SET).mkdir(parents=True, exist_ok=True)
-    for key, text, ev in jobs:
-        v = norm(trim(tts(kokoro, text)), 0.9)
-        s = stings[ev] * (0.7 if ev == "end" else 0.85)
-        clip = place([(0, s), (len(s) / SR + 0.12, v)])
-        clip = np.concatenate([np.zeros(int(0.05 * SR)), clip, np.zeros(int(0.25 * SR))])
-        mp3 = OUT / SET / f"{key}.mp3"
-        master(clip, mp3)
-        bundle["voices"][SET][key] = "data:audio/mpeg;base64," + base64.b64encode(mp3.read_bytes()).decode()
-        bundle["text"][SET][key] = text
-        bundle["duration"][SET][key] = round(len(clip) / SR, 2)
-        print(f"{key:18s} {len(clip) / SR:5.2f}s  {text}")
+    sets = {  # name inside jingles.js -> (lines, test line, sting maker)
+        "voice": (LINES, TEST_LINE, sting),
+        "halloween": (HALLOWEEN_LINES, HALLOWEEN_TEST, spooky_sting),
+    }
+    bundle = {"voices": {}, "text": {}, "duration": {}}
+    for name, (lines, test_line, make_sting) in sets.items():
+        jobs = []  # (key, text, event)
+        for ev, line in lines.items():
+            for fk, fname in FIELDS.items():
+                jobs.append((f"{ev}_{fk}", line.replace("{f}", fname).replace("{F}", fname[0].upper() + fname[1:]), ev))
+        jobs.append(("test", test_line, "test"))
+        stings = {ev: make_sting(ev) for ev in set(j[2] for j in jobs)}
+        for k in bundle:
+            bundle[k][name] = {}
+        (OUT / name).mkdir(parents=True, exist_ok=True)
+        for key, text, ev in jobs:
+            v = norm(trim(tts(kokoro, text)), 0.9)
+            s = stings[ev] * (0.7 if ev == "end" else 0.85)
+            clip = place([(0, s), (len(s) / SR + 0.12, v)])
+            clip = np.concatenate([np.zeros(int(0.05 * SR)), clip, np.zeros(int(0.25 * SR))])
+            mp3 = OUT / name / f"{key}.mp3"
+            master(clip, mp3)
+            bundle["voices"][name][key] = "data:audio/mpeg;base64," + base64.b64encode(mp3.read_bytes()).decode()
+            bundle["text"][name][key] = text
+            bundle["duration"][name][key] = round(len(clip) / SR, 2)
+            print(f"{name:9s} {key:18s} {len(clip) / SR:5.2f}s  {text}")
 
     js = "// Generated by tools/generate_jingles.py - do not edit by hand.\nwindow.JINGLES = " + json.dumps(bundle) + ";\n"
     (OUT / "jingles.js").write_text(js, encoding="utf-8")

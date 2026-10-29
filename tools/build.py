@@ -16,7 +16,7 @@ DIST = ROOT / "dist"
 OUT = DIST / "JinglePlayer.html"
 SITE = DIST / "site"
 SITE_FILES = ["manifest.webmanifest", "img/icon-180.png", "img/icon-192.png", "img/icon-512.png"]
-MIME = {".webp": "image/webp", ".jpg": "image/jpeg", ".png": "image/png", ".woff2": "font/woff2"}
+MIME = {".svg": "image/svg+xml", ".webp": "image/webp", ".jpg": "image/jpeg", ".png": "image/png", ".woff2": "font/woff2"}
 
 
 def data_uri(rel):
@@ -25,7 +25,7 @@ def data_uri(rel):
 
 
 def inline_assets(text):
-    return re.sub(r"(?:img|fonts)/[\w.-]+\.(?:webp|jpg|png|woff2)", lambda m: data_uri(m.group(0)), text)
+    return re.sub(r"(?:img|fonts)/[\w./-]+?\.(?:webp|jpg|png|woff2|svg)", lambda m: data_uri(m.group(0)), text)
 
 
 html = (APP / "index.html").read_text(encoding="utf-8")

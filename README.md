@@ -35,6 +35,9 @@ game pushes the rest of that field's day along with it.
   copy, and paste it in. Teams, fields, dates and times are recognised, and you choose the game type
   (length + halftime minute) for group and play-off games.
 * Or add games by hand with **+ Add game**, or use **+ Day** to add another day.
+* **Settings → Look**: **Classic** or **🎃 Halloween**. Halloween dresses Jules up as a vampire and Vincent as
+  a ghost, adds pumpkins, bats and webs, and switches to spooky jingles (organ, thunder, ghost wail, with
+  Halloween wording). It's the default right now; switch back to Classic after the tournament.
 * **Settings**: which jingles to use (each can be switched off, including both halftime jingles),
   whether the end-of-game warning comes **5 or 2 minutes** before the cap, halftime break length,
   field names (up to 4), and game types.
@@ -95,6 +98,13 @@ python tools/build.py
 
 Each clip is a sting (fanfare, chime, air horn or whistle) followed by the voice line, compressed
 and normalised loud (around -13 LUFS) to cut through background music.
+
+### Halloween artwork
+
+The costumed characters and the Halloween logo in `app/img/halloween/` were made from the club artwork
+with `tools/halloween_art.py`. It sends each sticker to Gemini 3 Pro Image through OpenRouter with a
+costume prompt, then cuts out the magenta background. Run it with `OPENROUTER_API_KEY` set; it costs
+about $0.20 per image. The pumpkin, bat and web are hand-made SVGs.
 
 ### Changing the default schedule
 
